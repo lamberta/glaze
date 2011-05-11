@@ -1,0 +1,3 @@
+examples/learning-webgl/
+examples/tmp/
+build/*.jar

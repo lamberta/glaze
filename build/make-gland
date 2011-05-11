@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+
+function print_help {
+    echo "Concatenates source files."
+    echo "Usage: $(basename $0) [options]"
+    echo "  -h    Show this usage guide."
+    echo "  -c    Clean."
+    echo "  -d    Build debug version."
+    echo "  -D    Build only debug version."
+}
+
+#this script is in the ./build dir
+cd "$(dirname $(readlink -f $0))"
+cd ..
+
+PROJECT_HOME="$PWD"
+OUT_FILE="$PROJECT_HOME/build/glaze.js"
+DEBUG_FILE="$PROJECT_HOME/build/glaze-debug.js"
+
+CLOSURE_COMPILER="$PROJECT_HOME/build/compiler.jar"
+#compiler options
+#WHITESPACE_ONLY, SIMPLE_OPTIMIZATIONS, ADVANCED_OPTIMIZATIONS
+COMPILATION_LEVEL="SIMPLE_OPTIMIZATIONS" 
+WARNING_LEVEL="DEFAULT" #QUIET, DEFAULT, VERBOSE
+
+function clean_up {
+    if [ -f "$OUT_FILE" ]; then
+        rm "$OUT_FILE"
+        echo "  Removed: $OUT_FILE"
+    fi
+    if [ -f "$DEBUG_FILE" ]; then
+        rm "$DEBUG_FILE"
+        echo "  Removed: $DEBUG_FILE"
+    fi
+    if [ -f "$OUT_FILE.error" ]; then
+        rm "$OUT_FILE.error"
+        echo "  Removed: $OUT_FILE.error"
+    fi
+}
+
+function concat_header {
+    echo "window.glaze = {};" > "$DEBUG_FILE"
+    echo "(function () {" >> "$DEBUG_FILE"
+}
+
+function concat_footer {
+    echo "}());" >> "$DEBUG_FILE"
+}
+
+function build_debug {
+    concat_header
+    cat "$PROJECT_HOME/src/utils/compat.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/glaze.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/utils/load.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/shader.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/program.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/buffer.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/texture.js" >> "$DEBUG_FILE"
+    concat_footer
+    echo "/*DEBUG*/" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/lib/webgl-debug.js" >> "$DEBUG_FILE"
+    echo "/*END_DEBUG*/" >> "$DEBUG_FILE"
+    
+    echo "  Created: $DEBUG_FILE"
+}
+
+function strip_debugging {
+    sed '/\/\*DEBUG\*\//,/\/\*END_DEBUG\*\//d' "$DEBUG_FILE" > "$OUT_FILE"
+}
+
+function compile_file {
+    #if we can't locate compiler.jar we'll just skip compilation
+    if [ ! -f "$CLOSURE_COMPILER" ]; then
+        echo -e "\n\tWarning: Unable to locate the Closure compiler."
+        echo -e "\tDownload available at http://code.google.com/closure/compiler/"
+        echo -e "\tPlace compiler.jar in the build directory."
+        echo -e "\tContinuing without compilation...\n"
+    else
+        mv "$OUT_FILE" "$OUT_FILE.tmp"
+        echo -n -e "\tCompiling file... "
+        if java -jar "$CLOSURE_COMPILER" \
+                --js "$OUT_FILE.tmp" \
+                --js_output_file "$OUT_FILE" \
+                --summary_detail_level 3 \
+                --warning_level "$WARNING_LEVEL" \
+                --compilation_level "$COMPILATION_LEVEL"; then
+
+            rm "$OUT_FILE.tmp"
+            echo "  Created: $OUT_FILE"
+        else
+            #error during compilation, save to look at
+            mv "$OUT_FILE.tmp" "$OUT_FILE.error"
+        fi
+    fi
+}
+
+function build_full {
+    clean_up
+    build_debug
+    if [ -z "$BUILD_DEBUG_ONLY" ]; then
+        strip_debugging
+        compile_file
+    fi
+    if [[ -z "$BUILD_DEBUG" && -z "$BUILD_DEBUG_ONLY" ]]; then
+        rm "$DEBUG_FILE"
+    fi
+}
+
+#parse args
+while getopts "dDch" option; do
+    case $option in
+        d) BUILD_DEBUG="1";;
+        D) BUILD_DEBUG_ONLY="1";;
+        c) clean_up; exit 0;;
+        h) print_help; exit 0;;
+        \?) print_help; exit 0;;
+    esac
+done
+
+build_full
