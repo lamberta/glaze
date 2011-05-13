@@ -1,16 +1,5 @@
 window.glaze = {};
 (function () {
-/*jslint browser: true, devel: true, onevar: true, undef: true, regexp: true, bitwise: true, newcap: true*/
-/*globals gl, gland*/
-if (typeof window.requestAnimationFrame !== 'function') {
-  window.requestAnimationFrame = window.webkitRequestAnimationFrame ||
-                                 window.mozRequestAnimationFrame ||
-                                 window.oRequestAnimationFrame ||
-                                 window.msRequestAnimationFrame ||
-                                 function (callback, element) {
-                                   window.setTimeout(callback, 1000/60);
-                                 };
-}
 /*jslint browser: true, devel: true, onevar: true, undef: true, regexp: true, plusplus: false, bitwise: true, newcap: true*/
 /*globals glaze, WebGLDebugUtils*/
 
@@ -173,6 +162,18 @@ function load_element_source (id, callback) {
   }
   return inner_html;
 }
+/*jslint browser: true, devel: true, onevar: true, undef: true, regexp: true, bitwise: true, newcap: true*/
+/*globals gl, glaze*/
+if (typeof window.requestAnimationFrame !== 'function') {
+  window.requestAnimationFrame = window.webkitRequestAnimationFrame ||
+                                 window.mozRequestAnimationFrame ||
+                                 window.oRequestAnimationFrame ||
+                                 window.msRequestAnimationFrame ||
+                                 function (callback, element) {
+                                   window.setTimeout(callback, 1000/60);
+                                 };
+}
+
 /**
  * Runs a function at an animation interval.
  * @param {function}      callback  Function to run.
