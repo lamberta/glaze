@@ -8,7 +8,7 @@ window.glaze = {};
 window.gl = null;
 
 Object.defineProperty(glaze, 'element', (function () {
-  var canvas_element;
+  var canvas_element = null;
   return {
     enumerable: true,
     configurable: true,
@@ -45,11 +45,11 @@ Object.defineProperty(glaze, 'element', (function () {
     var i = 0,
         len = ready_queue.length;
 
-    if (len > 0 && !gl) {
-      throw new Error("glaze.ready: No WebGL context, set glaze.element with a Canvas element.");
-    }
+    //if (len > 0) {
+    //  throw new Error("glaze.ready: No WebGL context, set glaze.element with a Canvas element.");
+    //}
     for (; i < len; i++) {
-      ready_queue[i](window.gl); //pass the global object to alias the namespace
+      ready_queue[i].call(glaze.element, window.gl); //pass the global object to alias the namespace
     }
     ready_queue.length = 0;
   }
@@ -60,15 +60,31 @@ Object.defineProperty(glaze, 'element', (function () {
   }
   
   /**
-   * @param {function} callback
+   * @param {HTMLCanvasElement=}  canvas
+   * @param {function}            callback
    */
-  glaze.ready = function (callback) {
+  glaze.ready = function (/*canvas,*/ callback) {
+    var canvas, old_canvas;
+    if (arguments.length === 2) {
+      canvas = get_element(arguments[0]);
+      callback = arguments[1];
+    }
     /*DEBUG*/
-    if (typeof callback !== 'function') {
-      throw new TypeError("glaze.ready(callback:function):Invalid parameter.");
+    if ((canvas && !canvas instanceof window.HTMLCanvasElement) || 
+        typeof callback !== 'function') {
+      throw new TypeError("glaze.ready([canvas,] callback):Invalid parameter.");
     }
     /*END_DEBUG*/
-    ready_queue.push(callback);
+    if (canvas) {
+      ready_queue.push(function () {
+        old_canvas = glaze.element;
+        glaze.element = canvas;
+        callback.call(canvas, window.gl);
+        glaze.element = old_canvas;
+      });
+    } else {
+      ready_queue.push(callback);
+    }
     //already loaded
     if (window.readyState === "complete") {
       dom_loaded();
@@ -162,6 +178,24 @@ function load_element_source (id, callback) {
   }
   return inner_html;
 }
+
+/**
+ * Ensures that any callbacks are run with the correct window.gl binding.
+ * @param {WebGLRenderingContext=}  context
+ * @param {function}                callback
+ * @param {*}                       params
+ * @returns {*} Return value of callback;
+ */
+function with_gl (context, callback /*, params...*/) {
+  var params = Array.prototype.slice.call(arguments, 2),
+      old_gl = window.gl,
+      rv;
+  if (params.length === 0) { params = null; }
+  window.gl = context;
+  rv = callback.apply(this, params);
+  window.gl = old_gl;
+  return rv;
+}
 /*jslint browser: true, devel: true, onevar: true, undef: true, regexp: true, bitwise: true, newcap: true*/
 /*globals gl, glaze*/
 if (typeof window.requestAnimationFrame !== 'function') {
@@ -178,19 +212,25 @@ if (typeof window.requestAnimationFrame !== 'function') {
  * Runs a function at an animation interval.
  * @param {function}      callback  Function to run.
  * @param {HTMLElement=}  element   Element bounds of the animation.
+ * @param {WebGLRenderingContext=}  gl
  * @param {*}             args      Variable amount of arguments to pass to the callback function.
  */
-glaze.animate = function (callback /*, element, args...*/) {
+glaze.animate = function (callback /*, element, gl, args...*/) {
   var args = Array.prototype.slice.call(arguments, 1),
       element = (args[0] instanceof HTMLElement) ? args.shift() : glaze.element,
+      gl = (args[0] instanceof WebGLRenderingContext) ? args.shift() : window.gl,
       that = this;
   if (args.length === 0 ) { args = null; }
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.animate: Invalid WebGL rendering context.");
+  }
   if (typeof callback !== 'function') {
     throw TypeError("glaze.createDraw(callback [, element, args...]): Invalid parameter.");
   }
   /*END_DEBUG*/
   (function tick () {
+    if (!window.gl) { window.gl = gl }; //gives our drawing function access to the global context
     callback.apply(that, args);
     window.requestAnimationFrame(tick, element);
   }());
@@ -199,15 +239,21 @@ glaze.animate = function (callback /*, element, args...*/) {
 /*globals gl, glaze, load_element_source, load_url_source*/
 
 /**
- * @param {string|number} type
- * @param {string}        src
+ * @param {string|number}           type
+ * @param {string}                  src
+ * @param {WebGLRenderingContext=}  gl
  * @return {WebGLShader}
  */
-glaze.createShader = function (type, src) {
-  var shader, status_log;
+glaze.createShader = function (type, src /*, gl*/) {
+  var shader, status_log,
+      gl = (arguments.length === 3) ? arguments[2] : window.gl;
+  
   if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
   if (type === 'fragment') { type = gl.FRAGMENT_SHADER; }
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (type !== gl.VERTEX_SHADER && type !== gl.FRAGMENT_SHADER) {
     throw new ReferenceError("glaze.createShader(type:constant, src:string): Invalid shader type: " + type);
   }
@@ -235,23 +281,31 @@ glaze.createShader = function (type, src) {
 /**
  * @param {string|HTMLElement}      location
  * @param {string|number}           type
+ * @param {WebGLRenderingContext=}  gl
  * @param {function(WebGLShader)=}  callback
  * @return {WebGLShader}
  */
-glaze.loadShader = function (location, type, callback) {
-  var element = get_element(location),
-      shader;
+glaze.loadShader = function (location, type /*, gl, callback*/) {
+  var args = Array.prototype.slice.call(arguments),
+      callback = (typeof args[args.length-1] === 'function') ? args.pop() : null,
+      gl = (args[args.length-1] instanceof WebGLRenderingContext) ? args.pop() : window.gl,
+      element = get_element(location),
+      shader, old_gl;
+
   /*DEBUG*/
-  if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (type === 'fragment') { type = gl.FRAGMENT_SHADER; }
-  if (type !== gl.VERTEX_SHADER && type !== gl.FRAGMENT_SHADER) {
+  if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
+  if (type !== gl.FRAGMENT_SHADER && type !== gl.VERTEX_SHADER) {
     throw new TypeError("glaze.loadShader(location:string, type:constant, callback:function): Invalid parameters.");
   }
   /*END_DEBUG*/
   if (element) {
-    shader = glaze.createShader(type, load_element_source(element));
+    shader = glaze.createShader(type, load_element_source(element), gl);
     if (typeof callback === 'function') {
-      callback(shader);
+      with_gl(gl, callback, shader);
     }
     return shader;
   } else {
@@ -261,7 +315,7 @@ glaze.loadShader = function (location, type, callback) {
     }
     /*END_DEBUG*/
     load_url_source(location, function (src) {
-      callback(glaze.createShader(type, src));
+      with_gl(gl, callback, glaze.createShader(type, src, gl));
     });
   }
 };
@@ -269,13 +323,19 @@ glaze.loadShader = function (location, type, callback) {
 /*globals gl, glaze*/
 
 /**
- * @param {WebGLShader} vShader   Vertex shader
- * @param {WebGLShader} fShader   Fragment shader
+ * @param {WebGLShader} vShader     Vertex shader
+ * @param {WebGLShader} fShader     Fragment shader
+ * @param {WebGLRenderingContext=}  gl
  * @return {WebGLProgram}
  */
-glaze.createProgram = function (vert_shader, frag_shader) {
-  var program, status_log;
+glaze.createProgram = function (vert_shader, frag_shader /*, gl*/) {
+  var program, status_log,
+      gl = (arguments.length === 3) ? arguments[2] : window.gl;
+  
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (!gl.isShader(vert_shader) || !gl.isShader(frag_shader)) {
     throw new TypeError("glaze.createProgram(vert_shader:WebGLShader, frag_shader:WebGLShader): Invalid parameters.");
   }
@@ -299,11 +359,19 @@ glaze.createProgram = function (vert_shader, frag_shader) {
 
 /**
  * @param {object}                  urls {vertex: 'url', fragment: 'url'}
+ * @param {WebGLRenderingContext=}  gl
  * @param {function(WebGLProgram)=} callback
  */
-glaze.loadProgram = function (urls, callback) {
-  var v_element, f_element, v_shader, f_shader, program;
+glaze.loadProgram = function (urls /*, gl, callback*/) {
+  var v_element, f_element, v_shader, f_shader, program, old_gl,
+      args = Array.prototype.slice.call(arguments),
+      callback = (typeof args[args.length-1] === 'function') ? args.pop() : null,
+      gl = (args[args.length-1] instanceof WebGLRenderingContext) ? args.pop() : window.gl;
+  
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (!urls || typeof urls.vertex === 'undefined' || typeof urls.fragment === 'undefined') {
     throw new TypeError("glaze.loadProgram(urls:{vertex:location, fragment:location}, callback:function): Invalid parameters.");
   }
@@ -312,16 +380,16 @@ glaze.loadProgram = function (urls, callback) {
   f_element = get_element(urls.fragment);
 
   if (v_element) {
-    v_shader = glaze.loadShader(v_element, gl.VERTEX_SHADER);
+    v_shader = glaze.loadShader(v_element, gl.VERTEX_SHADER, gl);
   }
   if (f_element) {
-    f_shader = glaze.loadShader(f_element, gl.FRAGMENT_SHADER);
+    f_shader = glaze.loadShader(f_element, gl.FRAGMENT_SHADER, gl);
   }
   
   if (v_shader && f_shader) {
-    program = glaze.createProgram(v_shader, f_shader);
+    program = glaze.createProgram(v_shader, f_shader, gl);
     if (typeof callback === 'function') {
-      callback(program);
+      with_gl(gl, callback, program);
     }
     return program;
   }
@@ -335,16 +403,16 @@ glaze.loadProgram = function (urls, callback) {
   if (!v_shader) {
     glaze.loadShader(urls.vertex, gl.VERTEX_SHADER, function (shader) {
       if (f_shader) {
-        callback(glaze.createProgram(shader, f_shader));
+        with_gl(gl, callback, glaze.createProgram(shader, f_shader, gl));
       } else {
         v_shader = shader;
       }
     });
   }
   if (!f_shader) {
-    glaze.loadShader(urls.fragment, gl.FRAGMENT_SHADER, function (shader) {
+    glaze.loadShader(urls.fragment, gl.FRAGMENT_SHADER, gl, function (shader) {
       if (v_shader) {
-        callback(glaze.createProgram(v_shader, shader));
+        with_gl(gl, callback, glaze.createProgram(v_shader, shader, gl));
       } else {
         f_shader = shader;
       }
@@ -355,11 +423,16 @@ glaze.loadProgram = function (urls, callback) {
 /**
  * @param {WebGLProgram}  program
  * @param {string}        name
+ * @param {WebGLRenderingContext=}  gl
  * return {number}                Location index.
  */
-glaze.createAttribute = function (program, name) {
-  var attrib;
+glaze.createAttribute = function (program, name /*, gl*/) {
+  var attrib,
+      gl = (arguments.length === 3) ? arguments[2] : window.gl;
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (!gl.isProgram(program) || typeof name !== 'string') {
     throw new TypeError("glaze.createAttribute(program:WebGLProgram, name:string): Invalid parameters.");
   }
@@ -373,10 +446,15 @@ glaze.createAttribute = function (program, name) {
 /**
  * @param {WebGLProgram} program
  * @param {string} name
+ * @param {WebGLRenderingContext=}  gl
  * return {WebGLUniformLocation}
  */
-glaze.createUniform = function (program, name) {
+glaze.createUniform = function (program, name /*, gl*/) {
+  var gl = (arguments.length === 3) ? arguments[2] : window.gl;
   /*DEBUG*/
+  if (!gl instanceof WebGLRenderingContext) {
+    throw new ReferenceError("glaze.createShader: No gl context.");
+  }
   if (!gl.isProgram(program) || typeof name !== 'string') {
     throw new TypeError("createUniform(program:WebGLProgram, name:string): Invalid parameters.");
   }

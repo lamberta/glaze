@@ -6,7 +6,7 @@
 window.gl = null;
 
 Object.defineProperty(glaze, 'element', (function () {
-  var canvas_element;
+  var canvas_element = null;
   return {
     enumerable: true,
     configurable: true,
@@ -43,11 +43,11 @@ Object.defineProperty(glaze, 'element', (function () {
     var i = 0,
         len = ready_queue.length;
 
-    if (len > 0 && !gl) {
-      throw new Error("glaze.ready: No WebGL context, set glaze.element with a Canvas element.");
-    }
+    //if (len > 0) {
+    //  throw new Error("glaze.ready: No WebGL context, set glaze.element with a Canvas element.");
+    //}
     for (; i < len; i++) {
-      ready_queue[i](window.gl); //pass the global object to alias the namespace
+      ready_queue[i].call(glaze.element, window.gl); //pass the global object to alias the namespace
     }
     ready_queue.length = 0;
   }
@@ -58,15 +58,31 @@ Object.defineProperty(glaze, 'element', (function () {
   }
   
   /**
-   * @param {function} callback
+   * @param {HTMLCanvasElement=}  canvas
+   * @param {function}            callback
    */
-  glaze.ready = function (callback) {
+  glaze.ready = function (/*canvas,*/ callback) {
+    var canvas, old_canvas;
+    if (arguments.length === 2) {
+      canvas = get_element(arguments[0]);
+      callback = arguments[1];
+    }
     /*DEBUG*/
-    if (typeof callback !== 'function') {
-      throw new TypeError("glaze.ready(callback:function):Invalid parameter.");
+    if ((canvas && !canvas instanceof window.HTMLCanvasElement) || 
+        typeof callback !== 'function') {
+      throw new TypeError("glaze.ready([canvas,] callback):Invalid parameter.");
     }
     /*END_DEBUG*/
-    ready_queue.push(callback);
+    if (canvas) {
+      ready_queue.push(function () {
+        old_canvas = glaze.element;
+        glaze.element = canvas;
+        callback.call(canvas, window.gl);
+        glaze.element = old_canvas;
+      });
+    } else {
+      ready_queue.push(callback);
+    }
     //already loaded
     if (window.readyState === "complete") {
       dom_loaded();

@@ -75,3 +75,21 @@ function load_element_source (id, callback) {
   }
   return inner_html;
 }
+
+/**
+ * Ensures that any callbacks are run with the correct window.gl binding.
+ * @param {WebGLRenderingContext=}  context
+ * @param {function}                callback
+ * @param {*}                       params
+ * @returns {*} Return value of callback;
+ */
+function with_gl (context, callback /*, params...*/) {
+  var params = Array.prototype.slice.call(arguments, 2),
+      old_gl = window.gl,
+      rv;
+  if (params.length === 0) { params = null; }
+  window.gl = context;
+  rv = callback.apply(this, params);
+  window.gl = old_gl;
+  return rv;
+}
