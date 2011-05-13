@@ -46,9 +46,7 @@
           u_proj_mat,                   //shader-program uniform location
           u_mv_mat,                     //shader-program uniform location
           projection_matrix = mat4.create(),
-          modelview_matrix = mat4.create(),
-          viewport_width,
-          viewport_height;
+          modelview_matrix = mat4.create();
 
       /* Assign the Canvas element, this sets the working web-gl context as the
        * global variable 'gl'. This is required for any function that calls WebGL.
@@ -57,15 +55,13 @@
        */
       glaze.element = "#display";
 
-      //Set this here so we don't have to keep querying the DOM.
-      viewport_width = glaze.element.width;
-      viewport_height = glaze.element.height;
-
-
       /* Main program flow.
        * glaze.ready() is executed when the DOM has been constructed and script files loaded.
        */
       glaze.ready(function () {
+        var viewport_width = glaze.element.width,
+            viewport_height = glaze.element.height;
+        
         /* Load the vertex and fragment shader sources, compile, and create a shader program.
          * If given a callback, run when the program is loaded.
          * Shader sources can be a element id, or a url. Since a url requires loading,
@@ -88,7 +84,7 @@
 
           /* Start the animation.
            */
-          tick();
+          glaze.animate(draw, viewport_width, viewport_height);
         });
       });//end glaze.ready
 
@@ -110,26 +106,18 @@
                                             1.0, -1.0,  0.0]);                                     
       }
 
-      /* Draw our scene, then call again.
-       * The framerate from requestAnimationFrame is fixed by the browser.
-       */
-      function tick () {
-        draw_scene();
-        window.requestAnimationFrame(tick, glaze.element);
-      }
-
       /* Render the WebGL scene.
        */
-      function draw_scene () {
+      function draw (width, height) {
         //set the viewport size
-        gl.viewport(0, 0, viewport_width, viewport_height);
+        gl.viewport(0, 0, width, height);
         //clear the viewport
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         /* Set the perspective of the projection matrix.
          * Matrix operations are not defined in WebGL, this method is from glMatrix.js
          */
-        mat4.perspective(45, (viewport_width / viewport_height), 0.1, 100.0, projection_matrix);
+        mat4.perspective(45, (width / height), 0.1, 100.0, projection_matrix);
 
         //Reset the model-view matrix to a null-transform.
         mat4.identity(modelview_matrix);

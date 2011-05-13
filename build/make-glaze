@@ -52,6 +52,7 @@ function build_debug {
     cat "$PROJECT_HOME/src/utils/compat.js" >> "$DEBUG_FILE"
     cat "$PROJECT_HOME/src/glaze.js" >> "$DEBUG_FILE"
     cat "$PROJECT_HOME/src/utils/load.js" >> "$DEBUG_FILE"
+    cat "$PROJECT_HOME/src/utils/utils.js" >> "$DEBUG_FILE"
     cat "$PROJECT_HOME/src/shader.js" >> "$DEBUG_FILE"
     cat "$PROJECT_HOME/src/program.js" >> "$DEBUG_FILE"
     cat "$PROJECT_HOME/src/buffer.js" >> "$DEBUG_FILE"
