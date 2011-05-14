@@ -2,21 +2,23 @@
 /*globals gl, glaze, load_element_source, load_url_source*/
 
 /**
- * @param {string|number}           type
- * @param {string}                  src
- * @param {WebGLRenderingContext=}  gl
+ * @param {string|number}         type
+ * @param {string}                src
+ * @this {WebGLRenderingContext}
  * @return {WebGLShader}
  */
-glaze.createShader = function (type, src /*, gl*/) {
+glaze.createShader = function (type, src) {
   var shader, status_log,
-      gl = (arguments.length === 3) ? arguments[2] : window.gl;
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
   
-  if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
-  if (type === 'fragment') { type = gl.FRAGMENT_SHADER; }
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
     throw new ReferenceError("glaze.createShader: No gl context.");
   }
+  /*END_DEBUG*/
+  if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
+  if (type === 'fragment') { type = gl.FRAGMENT_SHADER; }
+  /*DEBUG*/
   if (type !== gl.VERTEX_SHADER && type !== gl.FRAGMENT_SHADER) {
     throw new ReferenceError("glaze.createShader(type:constant, src:string): Invalid shader type: " + type);
   }
@@ -44,33 +46,37 @@ glaze.createShader = function (type, src /*, gl*/) {
 /**
  * @param {string|HTMLElement}      location
  * @param {string|number}           type
- * @param {WebGLRenderingContext=}  gl
  * @param {function(WebGLShader)=}  callback
+ * @this {WebGLRenderingContext}
  * @return {WebGLShader}
  */
-glaze.loadShader = function (location, type /*, gl, callback*/) {
+glaze.loadShader = function (location, type /*, callback*/) {
   var args = Array.prototype.slice.call(arguments),
       callback = (typeof args[args.length-1] === 'function') ? args.pop() : null,
-      gl = (args[args.length-1] instanceof WebGLRenderingContext) ? args.pop() : window.gl,
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl,
+      canvas = (glaze.canvas) ? glaze.canvas : null,
       element = get_element(location),
-      shader, old_gl;
+      shader;
 
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
     throw new ReferenceError("glaze.createShader: No gl context.");
   }
+  /*END_DEBUG*/
   if (type === 'fragment') { type = gl.FRAGMENT_SHADER; }
   if (type === 'vertex')   { type = gl.VERTEX_SHADER; }
+  /*DEBUG*/
   if (type !== gl.FRAGMENT_SHADER && type !== gl.VERTEX_SHADER) {
     throw new TypeError("glaze.loadShader(location:string, type:constant, callback:function): Invalid parameters.");
   }
   /*END_DEBUG*/
   if (element) {
-    shader = glaze.createShader(type, load_element_source(element), gl);
+    shader = glaze.createShader.call(gl, type, load_element_source(element));
     if (typeof callback === 'function') {
-      with_gl(gl, callback, shader);
+      callback.call(canvas, shader);
     }
     return shader;
+    
   } else {
     /*DEBUG*/
     if (typeof location !== 'string' || typeof callback !== 'function') {
@@ -78,7 +84,7 @@ glaze.loadShader = function (location, type /*, gl, callback*/) {
     }
     /*END_DEBUG*/
     load_url_source(location, function (src) {
-      with_gl(gl, callback, glaze.createShader(type, src, gl));
+      callback.call(canvas, glaze.createShader.call(gl, type, src));
     });
   }
 };

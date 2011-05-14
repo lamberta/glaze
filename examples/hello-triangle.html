@@ -15,13 +15,10 @@
     </style>
 
     <script id="shader-vert" type="x-shader/x-vertex">
-      attribute vec3 vertex_pos;
-      
-      uniform mat4 u_proj_mat;
-      uniform mat4 u_mv_mat;
-      
+      attribute vec4 vPosition;
+
       void main (void) {
-        gl_Position = u_proj_mat * u_mv_mat * vec4(vertex_pos, 1.0);
+        gl_Position = vPosition;
       }
     </script>
     
@@ -31,114 +28,47 @@
       #endif
       
       void main (void) {
-        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
       }
     </script>
   </head>
   <body>
     <canvas id="display" width="600" height="480"></canvas>
 
-    <script src="http://glmatrix.googlecode.com/hg/glMatrix-min.js"></script>
     <script src="../build/glaze-debug.js"></script>
     <script>
-      var triangle_pos,                 //vertices position buffer
-          vertex_pos,                   //shader-program attrib location
-          u_proj_mat,                   //shader-program uniform location
-          u_mv_mat,                     //shader-program uniform location
-          projection_matrix = mat4.create(),
-          modelview_matrix = mat4.create();
-
-      /* Assign the Canvas element, this sets the working web-gl context as the
-       * global variable 'gl'. This is required for any function that calls WebGL.
-       * If you have multiple WebGL Canvas elements, you would chnage this for
-       * subsequent calls.
-       */
-      glaze.element = "#display";
-
-      /* Main program flow.
-       * glaze.ready() is executed when the DOM has been constructed and script files loaded.
-       */
-      glaze.ready(function () {
-        var viewport_width = glaze.element.width,
-            viewport_height = glaze.element.height;
+      glaze.ready('#display', function (gl) {
+        //set background color
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
         
-        /* Load the vertex and fragment shader sources, compile, and create a shader program.
-         * If given a callback, run when the program is loaded.
-         * Shader sources can be a element id, or a url. Since a url requires loading,
-         * a callback must be supplied. Otherwise, already loaded elements could be run:
-         * 'var program = glaze.loadProgram({vertext: #shader-id, fragment: #frag-id});'
-         */
+        //load vertex/fragment shaders, create and link shader-program
         glaze.loadProgram({vertex:'#shader-vert', fragment:'#shader-frag'}, function (program) {
-          /* Initialize variables that are in the shaders.
-           */
-          init_shaders(program);
-          
-          /* Create the buffer objects that will hold the triangle vertices.
-           */
-          init_buffers();
-          
-          /* Set the background color, and turn on depth-testing.
-           */
-          gl.clearColor(0.0, 0.0, 0.0, 1.0);
-          gl.enable(gl.DEPTH_TEST);
+          var vPosition, vVertices;
 
-          /* Start the animation.
-           */
-          glaze.animate(draw, viewport_width, viewport_height);
+          //bind vPosition to attribute 0
+          vPosition = glaze.createAttribute(program, 'vPosition');
+          //create buffer to hold triangle vertexes position
+          vVertices = glaze.createBuffer([ 0.0,  0.5,  0.0,
+                                          -0.5, -0.5,  0.0,
+                                           0.5, -0.5,  0.0]);
+          //start the animation
+          glaze.animate(draw, this.width, this.height, program, vVertices);
         });
-      });//end glaze.ready
 
-      /* These are the attributes and uniform variables in the vertex shader.
-       * This is where our program can interact with the shaders.
-       */
-      function init_shaders (program) {
-        vertex_pos = glaze.createAttribute(program, 'vertex_pos');
-        
-        u_proj_mat = glaze.createUniform(program, 'u_proj_mat');
-        u_mv_mat = glaze.createUniform(program, 'u_mv_mat');
-      }
-
-      /* Vertices of a triangle around origin 0,0.
-       */
-      function init_buffers () {
-        triangle_pos = glaze.createBuffer([ 0.0,  1.0,  0.0,
-                                           -1.0, -1.0,  0.0,
-                                            1.0, -1.0,  0.0]);                                     
-      }
-
-      /* Render the WebGL scene.
-       */
-      function draw (width, height) {
-        //set the viewport size
-        gl.viewport(0, 0, width, height);
-        //clear the viewport
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        /* Set the perspective of the projection matrix.
-         * Matrix operations are not defined in WebGL, this method is from glMatrix.js
-         */
-        mat4.perspective(45, (width / height), 0.1, 100.0, projection_matrix);
-
-        //Reset the model-view matrix to a null-transform.
-        mat4.identity(modelview_matrix);
-
-        /* Translate the z-axis of the model-view matrix -7.0,
-         * This has the effect of moving the triangle away from the camera.
-         */
-        mat4.translate(modelview_matrix, [0, 0, -7.0]);
-
-        //Tell WebGL we are now using the triangle position buffer.
-        gl.bindBuffer(gl.ARRAY_BUFFER, triangle_pos);
-        //Send the position buffer to the vertex_pos attribute in the shader, in sets of 3.
-        gl.vertexAttribPointer(vertex_pos, 3, gl.FLOAT, false, 0, 0);
-  
-        //Set the matrix uniform variables in the shaders.
-        gl.uniformMatrix4fv(u_proj_mat, false, projection_matrix);
-        gl.uniformMatrix4fv(u_mv_mat, false, modelview_matrix);
-
-        //Draw
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-      }
+        function draw (width, height, program, vertices) {
+          //set the viewport
+          gl.viewport(0, 0, width, height);
+          //clear the color buffer
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          //use the program object
+          gl.useProgram(program);
+          //load the vertex data
+          gl.vertexAttribPointer(vertices, 3, gl.FLOAT, false, 0, vertices);
+          gl.enableVertexAttribArray(vertices);
+          
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+      });
     </script>
   </body>
 </html>

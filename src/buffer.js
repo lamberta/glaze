@@ -5,10 +5,12 @@
  * @param {array} vertices
  * @param {string=} target  Target buffer object, default: gl.ARRAY_BUFFER
  * @param {string=} usage   Expected usage, default: gl.STATIC_DRAW
+ * @this {WebGLRenderingContext}
  * return {WebGLBuffer}
  */
 glaze.createBuffer = function (vertices, target, usage) {
-  var buffer;
+  var gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl,
+      buffer;
   target = (target === undefined) ? gl.ARRAY_BUFFER : target;
   usage  = (usage  === undefined) ? gl.STATIC_DRAW : usage;
   /*DEBUG*/

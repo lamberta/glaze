@@ -1,55 +1,24 @@
 /*jslint browser: true, devel: true, onevar: true, undef: true, regexp: true, plusplus: false, bitwise: true, newcap: true*/
 /*globals glaze, WebGLDebugUtils*/
 
-/* Setting this as a global for convenience.
- */
-window.gl = null;
-
-Object.defineProperty(glaze, 'element', (function () {
-  var canvas_element = null;
-  return {
-    enumerable: true,
-    configurable: true,
-    get : function () { return canvas_element; },
-    set : function (element) {
-      if (element === null) {
-        window.gl = canvas_element = null;
-        return null;
-      }
-      element = get_element(element);
-      /*DEBUG*/
-      if (!element instanceof window.HTMLCanvasElement) {
-        throw new TypeError("glaze.element(canvasVar:HTMLCanvasElement): Invalid element.");
-      }
-      /*END_DEBUG*/
-      canvas_element = element;
-      window.gl = canvas_element.getContext("experimental-webgl");
-      /*DEBUG*/
-      if (typeof WebGLDebugUtils !== 'undefined') {
-        window.gl = WebGLDebugUtils.makeDebugContext(canvas_element.getContext("experimental-webgl"));
-      } else {
-        console.warn("glaze.element: Unable to locate WebGLDebugUtils, using regular context.");
-      }
-      /*END_DEBUG*/
-    }
-  };
-}()));
-
-
 (function () {
-  var ready_queue = [];
+  var ready_queue = []; // {canvas: element, queue: [fns...]}
   
   function dom_loaded () {
-    var i = 0,
-        len = ready_queue.length;
-
-    //if (len > 0) {
-    //  throw new Error("glaze.ready: No WebGL context, set glaze.element with a Canvas element.");
-    //}
-    for (; i < len; i++) {
-      ready_queue[i].call(glaze.element, window.gl); //pass the global object to alias the namespace
-    }
-    ready_queue.length = 0;
+    ready_queue.forEach(function (obj) {
+      obj.queue.forEach(function (callback) {
+        //set global so we can access throughout stack
+        glaze.canvas = obj.canvas;
+        glaze.gl = obj.canvas.getContext("experimental-webgl");
+        /*DEBUG*/
+        if (!glaze.gl instanceof window.WebGLRenderingContext) {
+          throw new ReferenceError("glaze.ready: Invalid WebGL rendering context.");
+        }
+        /*END_DEBUG*/
+        callback.call(glaze.canvas, glaze.gl);
+      });
+      obj.queue.length = 0;
+    });
   }
   
   function onDOMContentLoaded () {
@@ -58,44 +27,38 @@ Object.defineProperty(glaze, 'element', (function () {
   }
   
   /**
-   * @param {HTMLCanvasElement=}  canvas
-   * @param {function}            callback
+   * @param {HTMLCanvasElement}               canvas
+   * @param {function(WebGLRenderingContext)} callback
    */
-  glaze.ready = function (/*canvas,*/ callback) {
-    var canvas, old_canvas;
-    if (arguments.length === 2) {
-      canvas = get_element(arguments[0]);
-      callback = arguments[1];
-    }
+  glaze.ready = function (canvas, callback) {
+    var i, len;
+    canvas = get_element(canvas);
     /*DEBUG*/
-    if ((canvas && !canvas instanceof window.HTMLCanvasElement) || 
-        typeof callback !== 'function') {
-      throw new TypeError("glaze.ready([canvas,] callback):Invalid parameter.");
+    if (!canvas instanceof window.HTMLCanvasElement || typeof callback !== 'function') {
+      throw new TypeError("glaze.ready(canvas:HTMLCanvasElement, callback:function): Invalid parameter.");
     }
     /*END_DEBUG*/
-    if (canvas) {
-      ready_queue.push(function () {
-        old_canvas = glaze.element;
-        glaze.element = canvas;
-        callback.call(canvas, window.gl);
-        glaze.element = old_canvas;
-      });
+    if (ready_queue.some(function (obj) { return obj.canvas === canvas; })) {
+      //git a match, add to callback queue
+      for (i = 0, len = ready_queue.length; i < len; i++) {
+        if (ready_queue[i].canvas === canvas) {
+          ready_queue.queue.push(callback);
+          break;
+        }
+      }
     } else {
-      ready_queue.push(callback);
+      //new canvas
+      ready_queue.push({canvas: canvas, queue: [callback]});
     }
+
     //already loaded
-    if (window.readyState === "complete") {
+    if (window.readyState === 'complete') {
       dom_loaded();
     }
   };
 
   //if we missed the event, no need to listen for it
-  if (window.readyState !== "complete") {
-    if (window.addEventListener) {
-      window.addEventListener('DOMContentLoaded', onDOMContentLoaded, false);
-    } else {
-      console.error("window.addEventListener not supported.");
-    }
+  if (window.readyState !== 'complete') {
+    window.addEventListener('DOMContentLoaded', onDOMContentLoaded, false);
   }
-  
 }());

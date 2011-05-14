@@ -4,12 +4,14 @@
 /**
  * @param {Image} image
  * @param {number=} format  default: gl.RGBA [gl.RGB|gl.ALPHA|gl.LUMINANCE|gl.LUMINANCE_ALPHA]
+ * @this {WebGLRenderingContext}
  * @return {WebGLTexture}
  */
 glaze.createTexture = function (image, format) {
-  format = (format === undefined) ? gl.RGBA : format;
+  var gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl,
+      texture = gl.createTexture(),
+      format = (format === undefined) ? gl.RGBA : format;
   
-  var texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, format, format, gl.UNSIGNED_BYTE, image);
@@ -23,9 +25,12 @@ glaze.createTexture = function (image, format) {
 /**
  * @param {string}
  * @param {function(WebGLTexture)}
+ * @this {WebGLRenderingContext}
  */
 glaze.loadTexture = function (location, callback) {
-  var image;
+  var image,
+      canvas = (glaze.canvas) ? glaze.canvas : null,
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
 
   function load_image_error () {
     throw new URIError("glaze.loadTexture: Unable to load " + image.src);
@@ -47,11 +52,11 @@ glaze.loadTexture = function (location, callback) {
   }
   
   if (image.complete) { //image already loaded
-    callback(glaze.createTexture(image));
+    callback.call(canvas, glaze.createTexture.call(gl, image));
   } else {
     //if not, assign load handlers
     image.addEventListener('load', function () {
-      callback(glaze.createTexture(image));
+      callback.call(canvas, glaze.createTexture.call(gl, image));
     });
     image.addEventListener('error', load_image_error);
     image.addEventListener('abort', load_image_error);

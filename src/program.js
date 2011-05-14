@@ -2,14 +2,14 @@
 /*globals gl, glaze*/
 
 /**
- * @param {WebGLShader} vShader     Vertex shader
- * @param {WebGLShader} fShader     Fragment shader
- * @param {WebGLRenderingContext=}  gl
+ * @param {WebGLShader} vShader   Vertex shader
+ * @param {WebGLShader} fShader   Fragment shader
+ * @this {WebGLRenderingContext}
  * @return {WebGLProgram}
  */
-glaze.createProgram = function (vert_shader, frag_shader /*, gl*/) {
+glaze.createProgram = function (vert_shader, frag_shader) {
   var program, status_log,
-      gl = (arguments.length === 3) ? arguments[2] : window.gl;
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
   
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
@@ -38,15 +38,16 @@ glaze.createProgram = function (vert_shader, frag_shader /*, gl*/) {
 
 /**
  * @param {object}                  urls {vertex: 'url', fragment: 'url'}
- * @param {WebGLRenderingContext=}  gl
  * @param {function(WebGLProgram)=} callback
+ * @this {WebGLRenderingContext}
  */
-glaze.loadProgram = function (urls /*, gl, callback*/) {
-  var v_element, f_element, v_shader, f_shader, program, old_gl,
+glaze.loadProgram = function (urls /*, callback*/) {
+  var v_element, f_element, v_shader, f_shader, program,
       args = Array.prototype.slice.call(arguments),
       callback = (typeof args[args.length-1] === 'function') ? args.pop() : null,
-      gl = (args[args.length-1] instanceof WebGLRenderingContext) ? args.pop() : window.gl;
-  
+      canvas = (glaze.canvas) ? glaze.canvas : null,
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
+
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
     throw new ReferenceError("glaze.createShader: No gl context.");
@@ -59,16 +60,16 @@ glaze.loadProgram = function (urls /*, gl, callback*/) {
   f_element = get_element(urls.fragment);
 
   if (v_element) {
-    v_shader = glaze.loadShader(v_element, gl.VERTEX_SHADER, gl);
+    v_shader = glaze.loadShader.call(gl, v_element, gl.VERTEX_SHADER);
   }
   if (f_element) {
-    f_shader = glaze.loadShader(f_element, gl.FRAGMENT_SHADER, gl);
+    f_shader = glaze.loadShader.call(gl, f_element, gl.FRAGMENT_SHADER);
   }
   
   if (v_shader && f_shader) {
-    program = glaze.createProgram(v_shader, f_shader, gl);
+    program = glaze.createProgram.call(gl, v_shader, f_shader);
     if (typeof callback === 'function') {
-      with_gl(gl, callback, program);
+      callback.call(canvas, program);
     }
     return program;
   }
@@ -80,18 +81,18 @@ glaze.loadProgram = function (urls /*, gl, callback*/) {
   }
   /*END_DEBUG*/
   if (!v_shader) {
-    glaze.loadShader(urls.vertex, gl.VERTEX_SHADER, function (shader) {
+    glaze.loadShader.call(gl, urls.vertex, gl.VERTEX_SHADER, function (shader) {
       if (f_shader) {
-        with_gl(gl, callback, glaze.createProgram(shader, f_shader, gl));
+        callback.call(canvas, glaze.createProgram.call(gl, shader, f_shader));
       } else {
         v_shader = shader;
       }
     });
   }
   if (!f_shader) {
-    glaze.loadShader(urls.fragment, gl.FRAGMENT_SHADER, gl, function (shader) {
+    glaze.loadShader.call(gl, urls.fragment, gl.FRAGMENT_SHADER, function (shader) {
       if (v_shader) {
-        with_gl(gl, callback, glaze.createProgram(v_shader, shader, gl));
+        callback.call(canvas, glaze.createProgram.call(gl, v_shader, shader));
       } else {
         f_shader = shader;
       }
@@ -102,12 +103,12 @@ glaze.loadProgram = function (urls /*, gl, callback*/) {
 /**
  * @param {WebGLProgram}  program
  * @param {string}        name
- * @param {WebGLRenderingContext=}  gl
+ * @this {WebGLRenderingContext}
  * return {number}                Location index.
  */
 glaze.createAttribute = function (program, name /*, gl*/) {
   var attrib,
-      gl = (arguments.length === 3) ? arguments[2] : window.gl;
+      gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
     throw new ReferenceError("glaze.createShader: No gl context.");
@@ -125,11 +126,11 @@ glaze.createAttribute = function (program, name /*, gl*/) {
 /**
  * @param {WebGLProgram} program
  * @param {string} name
- * @param {WebGLRenderingContext=}  gl
+ * @this {WebGLRenderingContext}
  * return {WebGLUniformLocation}
  */
-glaze.createUniform = function (program, name /*, gl*/) {
-  var gl = (arguments.length === 3) ? arguments[2] : window.gl;
+glaze.createUniform = function (program, name) {
+  var gl = (this instanceof WebGLRenderingContext) ? this : glaze.gl;
   /*DEBUG*/
   if (!gl instanceof WebGLRenderingContext) {
     throw new ReferenceError("glaze.createShader: No gl context.");
